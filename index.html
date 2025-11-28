@@ -486,8 +486,25 @@
         .category-filters {
             display: flex;
             gap: 0.5rem;
-            flex-wrap: wrap;
+            overflow-x: auto;
+            flex-wrap: nowrap;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.3) transparent;
+            padding: 0.5rem 0;
             flex: 1;
+        }
+
+        .category-filters::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .category-filters::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .category-filters::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
         }
 
         .category-chip {
@@ -1776,6 +1793,29 @@
 
         .review-helpful button:hover { color: var(--primary); }
 
+        .review-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 0.75rem;
+            align-items: center;
+        }
+
+        .review-report {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #F87171;
+            padding: 0.25rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .review-report:hover {
+            background: rgba(239, 68, 68, 0.2);
+            color: #EF4444;
+        }
+
         .add-review {
             background: rgba(255, 255, 255, 0.05);
             border-radius: 12px;
@@ -2288,6 +2328,9 @@
                 <button class="admin-tab" onclick="switchAdminTab('premium')" id="admin-tab-premium">
                     💎 Premium
                 </button>
+                <button class="admin-tab" onclick="switchAdminTab('reports')" id="admin-tab-reports">
+                    ⚠️ Nahlášené <span class="badge" id="reports-badge">0</span>
+                </button>
             </div>
 
             <!-- Pending Panel -->
@@ -2503,6 +2546,19 @@
                                 </ul>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reports Panel -->
+            <div class="admin-panel" id="admin-panel-reports">
+                <div class="admin-card">
+                    <h3>⚠️ Nahlášené recenze</h3>
+                    <div class="admin-info" style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid #EF4444; margin-bottom: 1rem;">
+                        <p>ℹ️ Zobrazuje recenze, které uživatelé nahlásili jako nefunkční. Uživatelé mohou nahlásit pouze recenze, které předtím označili jako "užitečné".</p>
+                    </div>
+                    <div class="admin-scrollable" id="admin-reports-list">
+                        <!-- Dynamically populated -->
                     </div>
                 </div>
             </div>
@@ -2843,8 +2899,68 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+        // Sleva Interface Definition
+        interface Sleva {
+            id: number;
+            name: string;
+            address: string;
+            lat: number;
+            lng: number;
+            discount: string;
+            discountValue: number;
+            category: 'food' | 'cafe' | 'clothing' | 'tech' | 'beauty' | 'sport' | 'entertainment' | 'services';
+            isic: boolean;
+            conditions: string;
+            verified: boolean;
+            updatedAt: string;
+            rating: number;
+            ratingCount: number;
+            usedCount: number;
+            usedThisMonth: number;
+            avgSaving: number;
+            premium?: 'recommended' | 'sponsored';
+            reviews?: Review[];
+        }
+
+        interface Review {
+            id: number;
+            author: string;
+            rating: 1 | 2 | 3 | 4 | 5;
+            text: string;
+            date: string;
+            helpful: number;
+            helpfulVotes?: string[];
+            reported?: boolean;
+            reportedBy?: string;
+        }
+
+        interface AdminReport {
+            id: number;
+            discountId: number;
+            discountName: string;
+            reviewId: number;
+            reviewText: string;
+            reviewAuthor: string;
+            reviewRating: number;
+            reportedBy: string;
+            reportedAt: string;
+            status: 'pending' | 'resolved' | 'dismissed';
+            resolvedAt?: string;
+            resolvedBy?: string;
+        }
+
+        interface User {
+            email: string;
+            password: string;
+            name: string;
+            role: 'student' | 'admin';
+            favorites: number[];
+            usedDiscounts: number[];
+            totalSaved: number;
+        }
+
         // Data
-        let discounts = [
+        let discounts: Sleva[] = [
             { id: 1, name: "Coffee Time", address: "Velké náměstí 14, Hradec Králové", lat: 50.2093, lng: 15.8327, discount: "15%", discountValue: 15, category: "cafe", isic: true, conditions: "Na všechny nápoje kromě alkoholických", verified: true, updatedAt: "2025-01-15", rating: 4.5, ratingCount: 23, usedCount: 156, usedThisMonth: 34, avgSaving: 25, premium: 'recommended', reviews: [
                 { id: 1, author: "Jan N.", rating: 5, text: "Super kavárna, sleva funguje bez problémů!", date: "2025-01-10", helpful: 12 },
                 { id: 2, author: "Petra K.", rating: 4, text: "Dobrá káva, personál milý. Doporučuji!", date: "2025-01-08", helpful: 8 }
@@ -2871,6 +2987,7 @@
         ];
 
         let currentUser = null;
+        let adminReports = [];
         let map = null;
         let markers = [];
         let userMarker = null;
@@ -2893,6 +3010,12 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            // Load admin reports from localStorage
+            const storedReports = localStorage.getItem('adminReports');
+            if (storedReports) {
+                adminReports = JSON.parse(storedReports);
+            }
+
             initMap();
             renderDiscountList();
             updateStats();
@@ -3052,6 +3175,20 @@
             renderDiscountList();
         }
 
+        // Authentication Helper Functions
+        function checkLoginStatus() {
+            return currentUser !== null && currentUser !== undefined;
+        }
+
+        function ensureLogin(action) {
+            if (!checkLoginStatus()) {
+                showToast(`Pro ${action} se přihlas`, 'error');
+                openModal('login');
+                return false;
+            }
+            return true;
+        }
+
         // Reviews
         function submitReview(discountId) {
             if (!currentUser) {
@@ -3100,12 +3237,105 @@
         }
 
         function toggleHelpful(discountId, reviewId) {
+            if (!ensureLogin('hlasování o recenzi')) return;
+
             const discount = discounts.find(d => d.id === discountId);
             if (!discount || !discount.reviews) return;
             const review = discount.reviews.find(r => r.id === reviewId);
             if (review) {
+                // Initialize helpfulVotes array if it doesn't exist
+                if (!review.helpfulVotes) review.helpfulVotes = [];
+
+                // Check if user already voted
+                const userEmail = currentUser.email || currentUser.username;
+                if (review.helpfulVotes.includes(userEmail)) {
+                    showToast('Už jste hlasoval jako u užitečné', 'info');
+                    return;
+                }
+
+                // Add user vote
+                review.helpfulVotes.push(userEmail);
                 review.helpful++;
+
+                // Show report button after helpful vote
+                showReportButton(discountId, reviewId);
+
+                showToast('Označeno jako užitečné', 'success');
                 showDetail(discountId);
+            }
+        }
+
+        function showReportButton(discountId, reviewId) {
+            // Show report button after user has marked review as helpful
+            setTimeout(() => {
+                const reportBtn = document.querySelector(`[onclick="reportReview(${discountId}, ${reviewId})"]`);
+                if (reportBtn) {
+                    reportBtn.style.display = 'inline-block';
+                }
+            }, 100);
+        }
+
+        function reportReview(discountId, reviewId) {
+            if (!ensureLogin('nahlášení recenze')) return;
+
+            const discount = discounts.find(d => d.id === discountId);
+            if (!discount || !discount.reviews) return;
+
+            const review = discount.reviews.find(r => r.id === reviewId);
+            if (!review) return;
+
+            // Check if user marked this review as helpful
+            const userEmail = currentUser.email || currentUser.username;
+            if (!review.helpfulVotes || !review.helpfulVotes.includes(userEmail)) {
+                showToast('Můžete nahlásit pouze recenzi, kterou jste označili jako užitečnou', 'error');
+                return;
+            }
+
+            // Check if already reported
+            if (review.reported) {
+                showToast('Tato recenze již byla nahlášena', 'info');
+                return;
+            }
+
+            // Show confirmation dialog
+            if (confirm(`Opravdu chcete nahlásit tuto recenzi jako nefunkční?\n\n"${review.text.substring(0, 100)}..."\n\nAutor: ${review.author}`)) {
+                // Create report object
+                const report = {
+                    id: Date.now(),
+                    discountId: discountId,
+                    discountName: discount.name,
+                    reviewId: reviewId,
+                    reviewText: review.text,
+                    reviewAuthor: review.author,
+                    reviewRating: review.rating,
+                    reportedBy: userEmail,
+                    reportedAt: new Date().toISOString().split('T')[0],
+                    status: 'pending'
+                };
+
+                // Add to admin reports
+                adminReports.push(report);
+
+                // Mark review as reported
+                review.reported = true;
+                review.reportedBy = userEmail;
+
+                // Show feedback
+                showToast('Děkujeme za zpětnou vazbu', 'success');
+
+                // Hide report button
+                const reportBtn = document.querySelector(`[onclick="reportReview(${discountId}, ${reviewId})"]`);
+                if (reportBtn) {
+                    reportBtn.style.display = 'none';
+                }
+
+                // If admin is logged in, refresh admin panel
+                if (currentUser && currentUser.role === 'admin') {
+                    renderAdminReports();
+                }
+
+                // Save to localStorage
+                localStorage.setItem('adminReports', JSON.stringify(adminReports));
             }
         }
 
@@ -3302,6 +3532,7 @@
                         <div class="popup-stats">
                             <div class="popup-stat used">✓ ${d.usedCount}× využito</div>
                             <div class="popup-stat">💰 ~${d.avgSaving} Kč úspora</div>
+                            <div class="popup-stat">🎓 ${d.usedThisMonth}× tento měsíc</div>
                         </div>
                         <div class="popup-buttons">
                             <button class="popup-btn popup-btn-nav" onclick="openNavigationModal(${d.lat},${d.lng},'${escapeHtml(d.name)}','${escapeHtml(d.address)}')">🧭</button>
@@ -3440,7 +3671,6 @@
                     <div class="discount-card-actions">
                         <button class="card-btn card-btn-nav" onclick="event.stopPropagation(); openNavigationModal(${d.lat},${d.lng},'${escapeHtml(d.name)}','${escapeHtml(d.address)}')">🧭 Jet</button>
                         <button class="card-btn card-btn-detail" onclick="event.stopPropagation(); showDetail(${d.id})">📋 Detail</button>
-                        <button class="card-btn card-btn-share" onclick="event.stopPropagation(); openShareModal(${d.id})">📤</button>
                     </div>
                 </div>
             `}).join('');
@@ -3480,7 +3710,12 @@
 </div>
                     </div>
                     <div class="review-text">${r.text}</div>
-                    <div class="review-helpful"><button onclick="toggleHelpful(${id}, ${r.id})">👍 Užitečné (${r.helpful})</button></div>
+                    <div class="review-actions">
+                        <div class="review-helpful">
+                            <button onclick="toggleHelpful(${id}, ${r.id})">👍 Užitečné (${r.helpful})</button>
+                        </div>
+                        <button class="review-report" onclick="reportReview(${id}, ${r.id})" style="display: ${r.helpfulVotes && currentUser && (r.helpfulVotes.includes(currentUser.email) || r.helpfulVotes.includes(currentUser.username)) && !r.reported ? 'inline-block' : 'none'}">⚠️ Nefunguje</button>
+                    </div>
                 </div>
             `).join('') || '<p style="color:#9CA3AF;text-align:center;padding:1rem">Zatím žádné recenze. Buď první!</p>';
 
@@ -3505,8 +3740,16 @@
                     </div>
                     <div class="detail-stats">
                         <div class="detail-stat"><div class="value">${d.usedCount}</div><div class="label">využito</div></div>
-                        <div class="detail-stat"><div class="value">~${d.avgSaving} Kč</div><div class="label">úspora</div></div>
+                        <div class="detail-stat"><div class="value">~${d.avgSaving} Kč</div><div class="label">průměrná úspora</div></div>
                         <div class="detail-stat"><div class="value">${d.usedThisMonth}</div><div class="label">tento měsíc</div></div>
+                    </div>
+                    <div class="usage-context" style="background: rgba(139, 92, 246, 0.1); border-left: 4px solid var(--primary); padding: 1rem; margin: 1rem 0; border-radius: 8px;">
+                        <p style="margin: 0; color: #E0E7FF; font-size: 0.9rem;">
+                            🎓 <strong>Studenti využili tuto slevu ${d.usedThisMonth}× tento měsíc</strong>
+                        </p>
+                        <p style="margin: 0.5rem 0 0 0; color: #9CA3AF; font-size: 0.85rem;">
+                            Celková úspora studentů: ~${Math.round(d.avgSaving * d.usedThisMonth)} Kč tento měsíc
+                        </p>
                     </div>
                 </div>
                 <div class="detail-section"><div class="detail-section-title">📍 Adresa</div><div class="detail-section-content">${d.address}</div>${distInfo}</div>
@@ -3662,6 +3905,7 @@
             if (tab === 'all') renderAdminDiscounts();
             if (tab === 'categories') renderCategoryGrid();
             if (tab === 'premium') renderPremiumList();
+            if (tab === 'reports') renderAdminReports();
         }
 
         // Render pending list
@@ -4032,6 +4276,84 @@
                     </div>
                 </div>
             `).join('');
+        }
+
+        // Render admin reports
+        function renderAdminReports() {
+            const reportsList = document.getElementById('admin-reports-list');
+            if (!reportsList) return;
+
+            // Load reports from localStorage if not in memory
+            if (adminReports.length === 0) {
+                const stored = localStorage.getItem('adminReports');
+                if (stored) {
+                    adminReports = JSON.parse(stored);
+                }
+            }
+
+            // Filter out resolved reports
+            const pendingReports = adminReports.filter(r => r.status === 'pending');
+
+            // Update badge
+            const badge = document.getElementById('reports-badge');
+            if (badge) badge.textContent = pendingReports.length;
+
+            if (pendingReports.length === 0) {
+                reportsList.innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: #9CA3AF;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
+                        <p>Žádné nahlášené recenze</p>
+                        <p style="font-size: 0.85rem; margin-top: 0.5rem;">Všechny recenze jsou v pořádku</p>
+                    </div>
+                `;
+                return;
+            }
+
+            reportsList.innerHTML = pendingReports.map(report => `
+                <div class="admin-discount-item" style="border-left: 4px solid #EF4444; background: rgba(239, 68, 68, 0.05);">
+                    <div class="table-row" style="padding: 1rem;">
+                        <div class="table-main" style="flex: 1;">
+                            <div>
+                                <strong>${report.discountName}</strong>
+                                <div class="table-meta" style="color: #F87171; font-size: 0.85rem; margin-top: 0.25rem;">
+                                    Nahlášeno: ${formatDate(report.reportedAt)} • ${report.reportedBy}
+                                </div>
+                                <div class="table-desc" style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                                    <strong>Recenze od ${report.reviewAuthor} (${report.reviewRating}⭐):</strong>
+                                    <p style="margin: 0.5rem 0 0 0; color: #D1D5DB;">${report.reviewText}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="table-actions" style="display: flex; gap: 0.5rem; align-items: start;">
+                            <button class="table-btn table-btn-primary" onclick="resolveReport(${report.id}, 'resolved')" title="Vyřešit">
+                                ✅ Vyřešit
+                            </button>
+                            <button class="table-btn table-btn-delete" onclick="resolveReport(${report.id}, 'dismissed')" title="Zamítnout">
+                                ❌ Zamítnout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function resolveReport(reportId, action) {
+            const report = adminReports.find(r => r.id === reportId);
+            if (!report) return;
+
+            if (confirm(`Opravdu chcete ${action === 'resolved' ? 'vyřešit' : 'zamítnout'} tento report?\n\nSleva: ${report.discountName}\nRecenze: ${report.reviewText.substring(0, 100)}...`)) {
+                report.status = action;
+                report.resolvedAt = new Date().toISOString().split('T')[0];
+                report.resolvedBy = currentUser.email;
+
+                // Save to localStorage
+                localStorage.setItem('adminReports', JSON.stringify(adminReports));
+
+                // Refresh reports
+                renderAdminReports();
+
+                showToast(`Report ${action === 'resolved' ? 'vyřešen' : 'zamítnut'}`, 'success');
+            }
         }
 
         function addCategory(e) {

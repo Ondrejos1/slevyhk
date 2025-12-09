@@ -206,12 +206,90 @@
             justify-content: center;
             font-size: 1rem;
         }
-
+     btn-glass btn-icon theme-toggle" onclick="toggleTheme()" title="Přepnout režim">
+     
+        
+        
         main {
             padding-top: 80px;
             min-height: 100vh;
         }
 
+        /* Light mode theme */
+body.light-mode {
+    background: linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 50%, #CBD5E1 100%) !important;
+    color: #1F2937 !important;
+}
+
+body.light-mode .bg-animation .blob {
+    opacity: 0.25 !important;
+}
+
+body.light-mode header {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+body.light-mode .logo {
+    color: #1F2937;
+}
+
+body.light-mode .btn-glass {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: #1F2937 !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+body.light-mode .hero h1 {
+    background: linear-gradient(135deg, #1F2937 0%, #4B5563 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+body.light-mode .hero p,
+body.light-mode .stat-label,
+body.light-mode .card-meta,
+body.light-mode .card-description {
+    color: #6B7280 !important;
+}
+
+body.light-mode .search-container,
+body.light-mode .discount-card {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+body.light-mode .search-input-wrapper input {
+    background: white !important;
+    color: #1F2937 !important;
+    border: 2px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+body.light-mode .chip {
+    background: transparent !important;
+    color: #1F2937 !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+body.light-mode .card-title {
+    color: #1F2937 !important;
+}
+
+body.light-mode .stat {
+    background: rgba(255, 255, 255, 0.5) !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+.theme-toggle {
+    transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover {
+    transform: rotate(180deg);
+}
+         
+        
         /* Deal of the Day Banner */
         .deal-of-day {
             background: linear-gradient(135deg, #FF6B6B, #FF8E53);
@@ -306,7 +384,7 @@
             font-weight: 700;
             margin-bottom: 1rem;
             background: linear-gradient(135deg, white 0%, #E5E7EB 100%);
-            -webkit-background-clip: text;
+            -webkit-background-clip: text;            
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
@@ -4370,5 +4448,31 @@
             }
         }
     </script>
+
+<script>
+    // Load saved theme
+    if (localStorage.getItem('theme') === 'light') {
+        document.body.classList.add('light-mode');
+        document.querySelector('.theme-toggle').textContent = '☀️';
+    }
+
+    function toggleTheme() {
+        const body = document.body;
+        const toggle = document.querySelector('.theme-toggle');
+        
+        body.classList.toggle('light-mode');
+        
+        if (body.classList.contains('light-mode')) {
+            toggle.textContent = '☀️';
+            localStorage.setItem('theme', 'light');
+        } else {
+            toggle.textContent = '🌙';
+            localStorage.setItem('theme', 'dark');
+        }
+    }
+</script>
+
+
 </body>
 </html>
+

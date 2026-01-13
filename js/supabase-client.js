@@ -1,5 +1,5 @@
-const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR-ANON-KEY';
+const SUPABASE_URL = 'https://pmnklxbdhgzsmqfekjqe.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtbmtseGJkaGd6c21xZmVranFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIyNTIwNTksImV4cCI6MjA3NzgyODA1OX0.DfZ-d-rMjjIzk-nWi0djtIBf6afveIEWLg-pBrgogsE';
 
 // Inicializace (CDN UMD export je `supabase.createClient`)
 const supabase = (typeof supabase !== 'undefined' && supabase.createClient)
